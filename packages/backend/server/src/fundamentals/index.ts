@@ -14,6 +14,7 @@ export {
 } from './config';
 export * from './error';
 export { EventEmitter, type EventPayload, OnEvent } from './event';
+export { URLHelper } from './helpers';
 export { MailService } from './mailer';
 export { CallCounter, CallTimer, metrics } from './metrics';
 export {

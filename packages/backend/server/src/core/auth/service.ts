@@ -4,10 +4,11 @@ import {
   BadRequestException,
   Injectable,
   InternalServerErrorException,
+  Logger,
+  OnApplicationBootstrap,
   UnauthorizedException,
 } from '@nestjs/common';
 import { hash, verify } from '@node-rs/argon2';
-import { Algorithm, sign, verify as jwtVerify } from '@node-rs/jsonwebtoken';
 import { PrismaClient, type User } from '@prisma/client';
 import { nanoid } from 'nanoid';
 
@@ -16,6 +17,7 @@ import {
   MailService,
   verifyChallengeResponse,
 } from '../../fundamentals';
+import { FeatureManagementService } from '../features';
 import { Quota_FreePlanV1_1 } from '../quota';
 
 export type UserClaim = Pick<
@@ -28,91 +30,25 @@ export type UserClaim = Pick<
 export const getUtcTimestamp = () => Math.floor(Date.now() / 1000);
 
 @Injectable()
-export class AuthService {
+export class AuthService implements OnApplicationBootstrap {
+  private readonly logger = new Logger('AuthService');
   constructor(
     private readonly config: Config,
     private readonly prisma: PrismaClient,
-    private readonly mailer: MailService
+    private readonly mailer: MailService,
+    private readonly feature: FeatureManagementService
   ) {}
 
-  sign(user: UserClaim) {
-    const now = getUtcTimestamp();
-    return sign(
-      {
-        data: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          emailVerified: user.emailVerified?.toISOString(),
-          image: user.avatarUrl,
-          hasPassword: Boolean(user.hasPassword),
-          createdAt: user.createdAt.toISOString(),
-        },
-        iat: now,
-        exp: now + this.config.auth.accessTokenExpiresIn,
-        iss: this.config.serverId,
-        sub: user.id,
-        aud: 'https://affine.pro',
-        jti: randomUUID({
-          disableEntropyCache: true,
-        }),
-      },
-      this.config.auth.privateKey,
-      {
-        algorithm: Algorithm.ES256,
-      }
-    );
-  }
-
-  refresh(user: UserClaim) {
-    const now = getUtcTimestamp();
-    return sign(
-      {
-        data: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          emailVerified: user.emailVerified?.toISOString(),
-          image: user.avatarUrl,
-          hasPassword: Boolean(user.hasPassword),
-          createdAt: user.createdAt.toISOString(),
-        },
-        exp: now + this.config.auth.refreshTokenExpiresIn,
-        iat: now,
-        iss: this.config.serverId,
-        sub: user.id,
-        aud: 'https://affine.pro',
-        jti: randomUUID({
-          disableEntropyCache: true,
-        }),
-      },
-      this.config.auth.privateKey,
-      {
-        algorithm: Algorithm.ES256,
-      }
-    );
-  }
-
-  async verify(token: string) {
-    try {
-      const data = (
-        await jwtVerify(token, this.config.auth.publicKey, {
-          algorithms: [Algorithm.ES256],
-          iss: [this.config.serverId],
-          leeway: this.config.auth.leeway,
-          requiredSpecClaims: ['exp', 'iat', 'iss', 'sub'],
-          aud: ['https://affine.pro'],
-        })
-      ).data as UserClaim;
-
-      return {
-        ...data,
-        emailVerified: data.emailVerified ? new Date(data.emailVerified) : null,
-        createdAt: new Date(data.createdAt),
-      };
-    } catch (e) {
-      throw new UnauthorizedException('Invalid token');
+  async onApplicationBootstrap() {
+    if (this.config.node.dev) {
+      await this.signUp('Dev User', 'dev@affine.pro', 'dev').catch(() => {
+        // ignore
+      });
     }
+  }
+
+  canSignIn(email: string) {
+    return this.feature.canEarlyAccess(email);
   }
 
   async verifyCaptchaToken(token: any, ip: string) {
@@ -215,39 +151,6 @@ export class AuthService {
     });
   }
 
-  async createAnonymousUser(email: string): Promise<User> {
-    const user = await this.prisma.user.findFirst({
-      where: {
-        email: {
-          equals: email,
-          mode: 'insensitive',
-        },
-      },
-    });
-
-    if (user) {
-      throw new BadRequestException('Email already exists');
-    }
-
-    return this.prisma.user.create({
-      data: {
-        name: 'Unnamed',
-        email,
-        features: {
-          create: {
-            reason: 'created by invite sign up',
-            activated: true,
-            feature: {
-              connect: {
-                feature_version: Quota_FreePlanV1_1,
-              },
-            },
-          },
-        },
-      },
-    });
-  }
-
   async getUserByEmail(email: string): Promise<User | null> {
     return this.prisma.user.findFirst({
       where: {
@@ -338,5 +241,68 @@ export class AuthService {
   }
   async sendNotificationChangeEmail(email: string) {
     return this.mailer.sendNotificationChangeEmail(email);
+  }
+
+  async sendSignInEmail(user: User, redirectUri: string) {
+    const token = randomUUID();
+    await this.prisma.verificationToken.create({
+      data: {
+        type: 0,
+        token,
+        expiresAt: new Date(Date.now() + 1000 * 60 * 30),
+        userId: user.id,
+      },
+    });
+
+    const magicLink = new URL(`
+      ${this.config.baseUrl}/auth/magic-link
+    `);
+    magicLink.searchParams.set('token', token);
+    magicLink.searchParams.set('redirect_uri', redirectUri);
+
+    const result = await this.mailer.sendSignInEmail(magicLink.toString(), {
+      to: user.email,
+    });
+
+    const failed = result.rejected.concat(result.pending).filter(Boolean);
+    if (failed.length) {
+      throw new Error(`Email (${failed.join(', ')}) could not be sent`);
+    }
+
+    this.logger.log(
+      `send verification email success: ${result.accepted.join(', ')}`
+    );
+
+    return result;
+  }
+
+  async verifyMagicLinkToken(token: string) {
+    const record = await this.prisma.verificationToken.findUnique({
+      where: {
+        token,
+        type: 0,
+      },
+    });
+
+    if (!record) {
+      return null;
+    }
+
+    const user =
+      record.expiresAt > new Date() && record.userId
+        ? await this.prisma.user.findUnique({
+            where: {
+              id: record.userId,
+            },
+          })
+        : null;
+
+    await this.prisma.verificationToken.delete({
+      where: {
+        id: record.id,
+      },
+    });
+
+    return user;
   }
 }

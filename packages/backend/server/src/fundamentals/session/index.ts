@@ -9,6 +9,15 @@ export class SessionService {
 
   constructor(private readonly cache: SessionCache) {}
 
+  for(email: string) {
+    return {
+      get: (key: string) => this.get(email + ':' + key),
+      set: (key: string, value: any, sessionTtl = this.sessionTtl) =>
+        this.set(email + ':' + key, value, sessionTtl),
+      delete: (key: string) => this.delete(email + ':' + key),
+    };
+  }
+
   /**
    * get session
    * @param key session key

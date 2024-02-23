@@ -253,6 +253,7 @@ enum ServerDeploymentType {
 }
 
 enum ServerFeature {
+  OAuth
   Payment
 }
 

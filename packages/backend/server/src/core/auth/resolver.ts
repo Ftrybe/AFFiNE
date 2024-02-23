@@ -23,7 +23,7 @@ import {
   Throttle,
 } from '../../fundamentals';
 import { UserType } from '../users';
-import { Auth, CurrentUser } from './guard';
+import { CurrentUser } from './guard';
 import { AuthService } from './service';
 
 @ObjectType()
@@ -78,15 +78,13 @@ export class AuthResolver {
       new URL(ctx.req.headers.referer).pathname.startsWith('/open-app') &&
       ctx.req.headers.host === new URL(this.config.origin).host
     ) {
-      const cookiePrefix = this.config.node.prod ? '__Secure-' : '';
-      const sessionCookieName = `${cookiePrefix}next-auth.session-token`;
-      sessionToken = ctx.req.cookies?.[sessionCookieName];
+      sessionToken = ctx.req.cookies['sid'];
     }
 
     return {
       sessionToken,
-      token: this.auth.sign(user),
-      refresh: this.auth.refresh(user),
+      token: '',
+      refresh: '',
     };
   }
 
@@ -132,7 +130,6 @@ export class AuthResolver {
     },
   })
   @Mutation(() => UserType)
-  @Auth()
   async changePassword(
     @CurrentUser() user: UserType,
     @Args('token') token: string,
@@ -165,7 +162,6 @@ export class AuthResolver {
     },
   })
   @Mutation(() => UserType)
-  @Auth()
   async changeEmail(
     @CurrentUser() user: UserType,
     @Args('token') token: string
@@ -196,7 +192,6 @@ export class AuthResolver {
     },
   })
   @Mutation(() => Boolean)
-  @Auth()
   async sendChangePasswordEmail(
     @CurrentUser() user: UserType,
     @Args('email') email: string,
@@ -219,7 +214,6 @@ export class AuthResolver {
     },
   })
   @Mutation(() => Boolean)
-  @Auth()
   async sendSetPasswordEmail(
     @CurrentUser() user: UserType,
     @Args('email') email: string,
@@ -249,7 +243,6 @@ export class AuthResolver {
     },
   })
   @Mutation(() => Boolean)
-  @Auth()
   async sendChangeEmail(
     @CurrentUser() user: UserType,
     @Args('email') email: string,
@@ -272,7 +265,6 @@ export class AuthResolver {
     },
   })
   @Mutation(() => Boolean)
-  @Auth()
   async sendVerifyChangeEmail(
     @CurrentUser() user: UserType,
     @Args('token') token: string,
