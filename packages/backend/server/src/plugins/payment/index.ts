@@ -18,10 +18,10 @@ import { StripeWebhook } from './webhook';
   ],
   controllers: [StripeWebhook],
   // TODO(@forehalo): enable this requirements when conditional query is implemented in frontend
-  // requires: [
-  //   'plugins.payment.stripe.keys.APIKey',
-  //   'plugins.payment.stripe.keys.webhookKey',
-  // ],
+  requires: [
+    'plugins.payment.stripe.keys.APIKey',
+    'plugins.payment.stripe.keys.webhookKey',
+  ],
   contributesTo: ServerFeature.Payment,
   if: config => config.flavor.graphql,
 })

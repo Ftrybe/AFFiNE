@@ -1,4 +1,4 @@
-import { serverConfigQuery, ServerDeploymentType } from '@affine/graphql';
+import { serverConfigQuery, ServerFeature } from '@affine/graphql';
 import type { BareFetcher, Middleware } from 'swr';
 
 import { useQueryImmutable } from '../use-query';
@@ -25,20 +25,18 @@ const useServerConfig = () => {
   return config.serverConfig;
 };
 
-export const useServerType = () => {
+export const useServerFeature = (feature: ServerFeature) => {
   const config = useServerConfig();
 
   if (!config) {
-    return 'local';
+    return false;
   }
 
-  return config.type;
+  return config.features.includes(feature);
 };
 
-export const useSelfHosted = () => {
-  const serverType = useServerType();
-
-  return ['local', ServerDeploymentType.Selfhosted].includes(serverType);
+export const useServerPaymentFeature = () => {
+  return useServerFeature(ServerFeature.Payment);
 };
 
 export const useServerBaseUrl = () => {
