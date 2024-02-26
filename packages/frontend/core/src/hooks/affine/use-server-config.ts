@@ -1,4 +1,5 @@
-import { serverConfigQuery, ServerFeature } from '@affine/graphql';
+import type { ServerFeature } from '@affine/graphql';
+import { serverConfigQuery } from '@affine/graphql';
 import type { BareFetcher, Middleware } from 'swr';
 
 import { useQueryImmutable } from '../use-query';
@@ -25,18 +26,22 @@ const useServerConfig = () => {
   return config.serverConfig;
 };
 
-export const useServerFeature = (feature: ServerFeature) => {
+type LowercaseServerFeature = Lowercase<ServerFeature>;
+type ServerFeatureRecord = {
+  [key in LowercaseServerFeature]: boolean;
+};
+
+export const useServerFeatures = (): ServerFeatureRecord => {
   const config = useServerConfig();
 
   if (!config) {
-    return false;
+    return {} as ServerFeatureRecord;
   }
 
-  return config.features.includes(feature);
-};
-
-export const useServerPaymentFeature = () => {
-  return useServerFeature(ServerFeature.Payment);
+  return Array.from(new Set(config.features)).reduce((acc, cur) => {
+    acc[cur.toLowerCase() as LowercaseServerFeature] = true;
+    return acc;
+  }, {} as ServerFeatureRecord);
 };
 
 export const useServerBaseUrl = () => {

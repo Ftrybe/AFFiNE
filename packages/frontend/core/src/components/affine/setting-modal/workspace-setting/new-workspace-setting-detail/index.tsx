@@ -3,7 +3,7 @@ import {
   SettingRow,
   SettingWrapper,
 } from '@affine/component/setting-components';
-import { useServerPaymentFeature } from '@affine/core/hooks/affine/use-server-config';
+import { useServerFeatures } from '@affine/core/hooks/affine/use-server-config';
 import { useWorkspace } from '@affine/core/hooks/use-workspace';
 import { useWorkspaceInfo } from '@affine/core/hooks/use-workspace-info';
 import { UNTITLED_WORKSPACE_NAME } from '@affine/env/constant';
@@ -20,7 +20,7 @@ import type { WorkspaceSettingDetailProps } from './types';
 
 export const WorkspaceSettingDetail = (props: WorkspaceSettingDetailProps) => {
   const t = useAFFiNEI18N();
-  const hasPaymentFeature = useServerPaymentFeature();
+  const { payment: hasPaymentFeature } = useServerFeatures();
   const workspaceMetadata = props.workspaceMetadata;
 
   // useWorkspace hook is a vary heavy operation here, but we need syncing name and avatar changes here,

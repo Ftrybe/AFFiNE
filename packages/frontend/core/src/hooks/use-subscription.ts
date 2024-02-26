@@ -1,7 +1,7 @@
 import { useAsyncCallback } from '@affine/core/hooks/affine-async-hooks';
 import { type SubscriptionQuery, subscriptionQuery } from '@affine/graphql';
 
-import { useServerPaymentFeature } from './affine/use-server-config';
+import { useServerFeatures } from './affine/use-server-config';
 import { useQuery } from './use-query';
 
 export type Subscription = NonNullable<
@@ -14,7 +14,7 @@ const selector = (data: SubscriptionQuery) =>
   data.currentUser?.subscription ?? null;
 
 export const useUserSubscription = () => {
-  const hasPaymentFeature = useServerPaymentFeature();
+  const { payment: hasPaymentFeature } = useServerFeatures();
   const { data, mutate } = useQuery(
     hasPaymentFeature ? { query: subscriptionQuery } : undefined
   );
